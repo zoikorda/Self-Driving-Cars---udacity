@@ -6,11 +6,12 @@ from keras.models import load_model
 import base64
 from io import BytesIO
 from PIL import Image
+import cv2
 
 sio = socketio.Server()
 
 app = Flask(__name__) #'__main__'
-
+speed_limit = 10
 def image_preprocess(img):
   img = img[60:135,:,:]
   img = cv2.cvtColor(img, cv2.COLOR_RGB2YUV)
@@ -21,6 +22,7 @@ def image_preprocess(img):
 
 @sio.on('telemetry')
 def telemetry(sid, data):
+    speed = float(data['speed'])
     image = Image.open(BytesIO(base64.b64decode(data['image'])))
     image = np.asarray(image)
     image = image_preprocess(image)
@@ -28,7 +30,7 @@ def telemetry(sid, data):
     steering_angle = float(model.predict(image))
     throttle = 1.0 - speed/speed_limit
     print('{} {} {}'.format(steering_angle, throttle, speed))
-    send_control(steering_angle, 1.0)
+    send_control(steering_angle, throttle)
 
 @sio.on('connect')
 def connect(sid, environ):
@@ -42,5 +44,6 @@ def send_control(steering_angle, throttle):
     })
 
 if __name__ == '__main__':
+    model = load_model('model.h5')
     app = socketio.Middleware(sio, app)
     eventlet.wsgi.server(eventlet.listen(('', 4567)), app)
